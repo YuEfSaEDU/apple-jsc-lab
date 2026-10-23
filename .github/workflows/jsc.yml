@@ -37,9 +37,8 @@ jobs:
           git checkout -f FETCH_HEAD
           test "$(git rev-parse HEAD)" = "$WEBKIT_SHA" || (echo "SHA MISMATCH"; exit 1)
           git rev-parse HEAD
-
-      - name: Build jsc (jsc-only, release)
-        run: cd webkit && ./Tools/Scripts/build-jsc --jsc-only --release
+      - name: Build jsc (jsc-only, release, GCC)
+        run: cd webkit && export CC=gcc CXX=g++ && ./Tools/Scripts/build-jsc --jsc-only --release
 
       - name: Run PoCs (control vs attack, verbatim log = source of truth)
         run: |
