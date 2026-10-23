@@ -37,13 +37,19 @@ jobs:
           git checkout -f FETCH_HEAD
           test "$(git rev-parse HEAD)" = "$WEBKIT_SHA" || (echo "SHA MISMATCH"; exit 1)
           git rev-parse HEAD
-      - name: Build jsc (jsc-only, release, GCC, -Werror off)
-        run: cd webkit && export CC=gcc CXX=g++ && ./Tools/Scripts/build-jsc --jsc-only --release --cmakeargs="-DDEVELOPER_MODE=OFF"
+      - name: Build jsc (cmake+ninja, target jsc only)
+        run: |
+          cd webkit
+          export CC=gcc CXX=g++
+          cmake -B WebKitBuild/Release -DPORT=JSCOnly -DCMAKE_BUILD_TYPE=Release -DDEVELOPER_MODE=OFF -GNinja
+          ninja -C WebKitBuild/Release jsc
 
       - name: Run PoCs (control vs attack, verbatim log = source of truth)
         run: |
           set +e
-          JSC=./webkit/WebKitBuild/Release/bin/jsc
+          JSC=$(find ./webkit/WebKitBuild -type f -name jsc -perm -u+x | head -1)
+          test -x "$JSC" || { echo "jsc binary not found"; find ./webkit/WebKitBuild -name 'jsc*' | head -20; exit 1; }
+          echo "JSC_BIN: $JSC"
           echo "JSC_SHA: $WEBKIT_SHA"
           for f in poc/*.js; do
             echo "===== $f ====="
