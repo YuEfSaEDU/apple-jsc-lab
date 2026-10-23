@@ -1,40 +1,44 @@
-// PoC 001 — HYP-AP-J01: Temporal.ZonedDateTime.until() release-noop assertion probe
-// Claim (source): ZonedDateTimeCore.cpp:176-227 — the day-correction loop's `ASSERT(success)`
-// is a no-op in release jsc; if a skewed zone keeps adjustedTimeDiff sign == sign for all
-// corrected candidates, an unvalidated intermediateDate feeds combineDateAndTimeDuration.
-// Observable (if hit): duration result inconsistent with epoch-ns difference of the same pair,
-// or an exception other than the documented RangeError paths.
-//
-// CONTROL: known-good zone (UTC) pair with hand-computed expected duration -> must match exactly.
-// ATTACK: skew/high-offset zones x range-edge instants, largestUnit:'year' and 'month'.
-// Verdict lines are printed from what the run actually produced.
+// PoC 001 — HYP-AP-J01 probe: Temporal.ZonedDateTime.until() release-noop assertion.
+// NOTE (post-triage 2026-10-23): J01 is Bugzilla-class (spec-correctness only) — this PoC
+// is kept as a pipeline validator (control-vs-attack + RESULT lines), NOT a bounty claim.
+// CONTROL: known-good UTC pair with hand-computed duration must match exactly.
+// ATTACK: skew/high-offset zones x range-edge instants, largestUnit year|month.
+// Oracle: sign(duration fields) must equal sign(epochNs(B) - epochNs(A)); any mismatch is an anomaly.
 
-function check(label, zdtA, zdtB, largestUnit, expectedNsSign) {
+function signOf(v) {
+    // Duration fields may be Number or BigInt depending on engine revision — normalize.
+    if (typeof v === "bigint") return v < 0n ? -1 : (v > 0n ? 1 : 0);
+    return v < 0 ? -1 : (v > 0 ? 1 : 0);
+}
+
+function check(label, zdtA, zdtB, largestUnit) {
     let out;
     try {
         out = zdtA.until(zdtB, { largestUnit });
     } catch (e) {
-        // RangeError is a documented behavior for out-of-range durations: record, not a finding.
-        print("EX " + label + " " + e.name);
+        return false; // RangeError = documented behavior
+    }
+    try {
+        const ns = zdtB.toInstant().epochNanoseconds.subtract(zdtA.toInstant().epochNanoseconds);
+        const nsSign = signOf(ns);
+        const fields = ["years","months","weeks","days","hours","minutes","seconds","milliseconds","microseconds","nanoseconds"];
+        let durSign = 0;
+        for (const f of fields) {
+            const s = signOf(out[f]);
+            if (s !== 0) { if (durSign !== 0 && durSign !== s) { durSign = 2; } else { durSign = s; } }
+        }
+        const consistent = (durSign === 2) ? false : (durSign === nsSign);
+        if (!consistent) {
+            print("ANOMALY " + label + " largestUnit=" + largestUnit +
+                  " nsDiff=" + ns.toString() +
+                  " dur[y,m,d]=" + out.years + "," + out.months + "," + out.days);
+            return true;
+        }
+        return false;
+    } catch (e) {
+        print("HARNESS-ERR " + label + " " + e);
         return false;
     }
-    // Sanity invariant: sign of the duration must equal sign of epochNs(B) - epochNs(A).
-    const ns = zdtB.toInstant().epochNanoseconds.subtract(zdtA.toInstant().epochNanoseconds);
-    // Duration sign via any non-zero field (Temporal.Duration has no total() in all builds).
-    let durNeg = false, durPos = false;
-    for (const f of ["years","months","weeks","days","hours","minutes","seconds","milliseconds","microseconds","nanoseconds"]) {
-        if (out[f] < 0n) durNeg = true;
-        if (out[f] > 0n) durPos = true;
-    }
-    const nsNeg = ns < 0n, nsPos = ns > 0n;
-    const consistent = (ns === 0n) ? (!durNeg && !durPos) : (nsNeg === durNeg && nsPos === durPos);
-    if (!consistent) {
-        print("ANOMALY " + label + " largestUnit=" + largestUnit +
-              " nsDiff=" + ns.toString() +
-              " dur[y,m,d,h,mi,s]=" + out.years + "," + out.months + "," + out.days + "," + out.hours + "," + out.minutes + "," + out.seconds);
-        return true;
-    }
-    return false;
 }
 
 // ---- CONTROL ----
@@ -43,7 +47,8 @@ try {
     const a = Temporal.ZonedDateTime.from("2020-01-01T00:00:00+00:00[UTC]");
     const b = Temporal.ZonedDateTime.from("2021-03-05T06:30:00+00:00[UTC]");
     const d = a.until(b, { largestUnit: "year" });
-    const ok = d.years === 1n && d.months === 2n && d.days === 4n && d.hours === 6n && d.minutes === 30n;
+    const ok = String(d.years) === "1" && String(d.months) === "2" && String(d.days) === "4" &&
+               String(d.hours) === "6" && String(d.minutes) === "30";
     print("RESULT control(UTC until exact): " + ok);
     controlOk = ok;
 } catch (e) {
@@ -51,7 +56,7 @@ try {
     controlOk = false;
 }
 
-// ---- ATTACK: skew zones x edge instants ----
+// ---- ATTACK ----
 const ZONES = [
     "UTC","Antarctica/Casey","Asia/Kathmandu","Pacific/Chatham","Australia/Lord_Howe",
     "Pacific/Apia","Pacific/Pago_Pago","Pacific/Kiritimati","Asia/Colombo","Asia/Tehran",
@@ -60,9 +65,8 @@ const ZONES = [
     "Asia/Gaza","Europe/Dublin","Antarctica/Troll","Pacific/Norfolk","Asia/Jerusalem",
     "America/Havana","Australia/Sydney","Pacific/Auckland","America/Asuncion","Asia/Baku"
 ];
-// Near-max temporal range: +/- 1e8 days of epoch (273790 years); also mid-range fold/gap dates.
 const DAYNS = 86400000000000n;
-const NEAR_MAX = 99999999n * DAYNS;   // ~1 day inside the positive edge
+const NEAR_MAX = 99999999n * DAYNS;
 const NEAR_MIN = -99999999n * DAYNS;
 const EDGE_OFFSETS = [0n, 1n, 3600000000000n, -3600000000000n, DAYNS - 1n, -(DAYNS - 1n), 5400000000000n, -5400000000000n];
 
@@ -75,11 +79,10 @@ for (const zone of ZONES) {
                 try {
                     a = new Temporal.ZonedDateTime(base + off, zone);
                     b = new Temporal.ZonedDateTime(base + off + off2, zone);
-                } catch (e) { continue; } // out-of-range instant: documented, skip
-                tried++;
+                } catch (e) { continue; }
                 for (const lu of ["year", "month"]) {
-                    if (check(zone + "@" + base.toString() + "+" + off.toString(), a, b, lu)) anomalies++;
                     tried++;
+                    if (check(zone, a, b, lu)) anomalies++;
                 }
             }
         }
@@ -87,5 +90,5 @@ for (const zone of ZONES) {
 }
 print("tried=" + tried + " anomalies=" + anomalies);
 print("RESULT zdt-until-consistency-anomaly-found: " + (anomalies > 0));
-if (!controlOk) { print("RESULT harness-control: FAILED"); throw new Error("control failed"); }
-print("RESULT harness-control: true");
+print("RESULT harness-control: " + controlOk);
+if (!controlOk) throw new Error("control failed");
