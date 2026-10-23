@@ -5,7 +5,7 @@ on:
 
 jobs:
   jsc:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
@@ -19,7 +19,7 @@ jobs:
           path: |
             webkit
             WebKitBuild
-          key: jsc-v1-${{ env.WEBKIT_SHA }}
+          key: jsc-v1-${{ env.WEBKIT_SHA }}-u24
 
       - name: Dependencies
         run: |
