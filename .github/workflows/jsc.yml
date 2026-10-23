@@ -25,6 +25,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build ruby-full python3 perl gperf bison flex libicu-dev pkg-config
+
       - name: Clone WebKit at pinned commit
         run: |
           if [ ! -d webkit/.git ]; then
@@ -47,6 +48,8 @@ jobs:
           echo "JSC_SHA: $WEBKIT_SHA"
           for f in poc/*.js; do
             echo "===== $f ====="
-            "$JSC" "$f"
+            FLAGS=$(head -n 40 "$f" | grep -a '^//@flags:' | head -1 | cut -d: -f2-)
+            echo "flags:${FLAGS:- none}"
+            "$JSC" $FLAGS "$f"
             echo "exit_code[$f]=$?"
           done

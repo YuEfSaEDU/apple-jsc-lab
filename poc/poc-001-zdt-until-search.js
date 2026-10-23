@@ -1,3 +1,4 @@
+//@flags: --useTemporal=true
 // PoC 001 — HYP-AP-J01 probe: Temporal.ZonedDateTime.until() release-noop assertion.
 // NOTE (post-triage 2026-10-23): J01 is Bugzilla-class (spec-correctness only) — this PoC
 // is kept as a pipeline validator (control-vs-attack + RESULT lines), NOT a bounty claim.
