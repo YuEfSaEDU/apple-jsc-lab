@@ -6,6 +6,9 @@
 function out(s){ print(s); }
 let ok = 0, fail = 0;
 function T(name, fn) {
+  try { const r = fn(); if (r === false) { fail++; out("RESULT " + name + ": FALSE"); } else { ok++; } }
+  catch (e) { fail++; out("RESULT " + name + ": EX " + e); }
+}
 const bytes = new Uint8Array([0,97,115,109,1,0,0,0,
   1,6,1,96,1,127,1,127,              // type section: content 6: 1 type, (i32)->(i32)
   2,11,1,3,101,110,118,3,105,110,99,0,0, // import env.inc
