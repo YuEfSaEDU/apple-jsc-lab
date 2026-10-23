@@ -6,17 +6,12 @@
 function out(s){ print(s); }
 let ok = 0, fail = 0;
 function T(name, fn) {
-  try { const r = fn(); if (r === false) { fail++; out("RESULT " + name + ": FALSE"); } else { ok++; } }
-  catch (e) { fail++; out("RESULT " + name + ": EX " + e); }
-}
-
-// wasm module: import a suspending import; export fn calling it
 const bytes = new Uint8Array([0,97,115,109,1,0,0,0,
-  1,7,1,96,1,127,1,127,              // type: (i32)->i32
-  2,11,1,3,101,110,118,3,105,110,99,0,0, // import env.inc (i32)->i32
-  3,2,1,0,                            // func 0 : type 0
-  7,7,1,3,114,117,110,0,0,           // export "run" func 0
-  10,9,1,7,0,32,0,16,0,11]);         // body: local.get 0; call 0; end
+  1,6,1,96,1,127,1,127,              // type section: content 6: 1 type, (i32)->(i32)
+  2,11,1,3,101,110,118,3,105,110,99,0,0, // import env.inc
+  3,2,1,0,                            // func 0
+  7,7,1,3,114,117,110,0,0,           // export "run"
+  10,8,1,6,0,32,0,16,0,11]);         // code: body size 6: local.get 0; call 0; end
 
 T("jspi-available", () => typeof WebAssembly.Suspending === "function" && typeof WebAssembly.promising === "function");
 
